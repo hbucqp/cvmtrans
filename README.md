@@ -1,7 +1,7 @@
 # cvmtrans
 
 ![PYPI](https://img.shields.io/pypi/v/cvmtrans)
-![Static Badge](https://img.shields.io/badge/OS-_Windows_%7C_Mac_%7C_Linux-steelblue)
+![Static Badge](https://img.shields.io/badge/OS-_Mac_%7C_Linux-steelblue)
 
 
 ## Installation
@@ -38,6 +38,7 @@ optional arguments:
   -tag_3 TAG_3  <3‘ end tags or barcode>: The tag sequence at the 3’ end will be removed
   -o O          <output_fastq>: output filename of the fastq file
 ```
+
 
 ### 3. Get the insertion site statistics table
 ```
