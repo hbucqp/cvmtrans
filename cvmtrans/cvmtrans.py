@@ -6,7 +6,28 @@ import pysam
 import pandas as pd
 import numpy as np
 import tempfile
+import argparse
 from Bio import SeqIO
+
+
+def args_parse():
+    "Parse the input argument, use '-h' for help."
+    parser = argparse.ArgumentParser(
+        usage='cvmtrans -bam_file <sorted_bam_files> -embl_file <reference embl file> -output <tab delimited text file> \n\nAuthor: Qingpo Cui(SZQ Lab, China Agricultural University)\n')
+    # group = parser.add_mutually_exclusive_group(required=False)
+    parser.add_argument(
+        "-bam_file", help="<input_fastq>: output filename of the fastq file")
+    parser.add_argument(
+        "-embl_file", help="<input_file>: the tag sequence")
+    parser.add_argument(
+        "-output", help="<output_fastq>: output filename of the fastq file")
+
+    # parser.add_argument('-v', '--version', action='version',
+    #                     version='Version: ' + get_version("__init__.py"), help='<display version>')
+    if len(sys.argv) == 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
+    return parser.parse_args()
 
 
 def bam2insdict(bamfile):
@@ -116,82 +137,107 @@ def get_product_value(feature):
         return ""
 
 
-bamfile = pysam.AlignmentFile("1-18W_cuttags_2_sorted.bam", "rb")
+def get_insertion_stat(bam_file, embl_file, output):
+    """
+    Get insertion information from sorted bam files
+
+    Parameters:
+    -----------
+    bam_file: str
+        The path of bam format file
+    embl_file: str
+        The path of the embl reference file
+    output: str
+        The output filename
+    """
+
+    # parse bamfile
+    bamfile = pysam.AlignmentFile(bam_file, "rb")
+    insert_read_counts = bam2insdict(bamfile)
+
+    # parse the embl file
+    embl_file = embl_file
+    cds_coordinates = cds_locations(embl_file)
+
+    # process the insertion sites
+    records = SeqIO.parse(embl_file, 'embl')
+    for record in records:
+        seq_id = record.id
+        if seq_id == '':
+            sys.exit(
+                "Could not find sequence name from your given embl file. Exiting ...")
+
+        # print(dir(record))
+        # Access information from the SeqRecord
+        # print(f"Accession: {record.id}")
+        # print(f"Description: {record.description}")
+        # print(f"Sequence length: {len(record.seq)}")
+        # ... other relevant information
+
+        # check if embl seq id in the insertion site dictionary
+
+        try:
+            insert_sites = insert_read_counts[record.id]
+        except:
+            sys.exit("Could not found the corresponding seq name %s in insertion dictionary, please check your embl file and make sure your mapping reference file has the same header with your embl file." % record.id)
+        with open(output, 'w') as out:
+            out.write(
+                'locus_tag\tgene_name\tncrna\tstart\tend\tstrand\tread_count\tins_count\tins_index\tproduct\n')
+            # Access features (e.g., CDS, gene, etc.)
+            for feature in record.features:
+                if feature.type == "gene" and not is_gene_within_cds(cds_coordinates, feature):
+                    continue
+                # if feature.type in ["CDS", "polypeptide", "gene"]: remove gene in order to delete duplicates annotation
+                if feature.type in ["CDS", "polypeptide"]:
+                    feature_id = get_feature_id(feature)
+                    gene_name = get_gene_name(feature)
+                    product_value = get_product_value(feature)
+                    rna_value = "1" if "ncRNA" in feature.qualifiers else "0"
+                    strand = feature.location.strand
+
+                    start = feature.location.start
+                    end = feature.location.end - 1
+                    feature_start = start + 1
+                    feature_end = end + 1
+                    # print(
+                    # f'{feature_id}\t{gene_name}\t{rna_value}\t{start}\t{end}\t{strand}\t{product_value}')
+
+                    # calculate the insert_count and the total reads in the corresponding insertion gene
+                    count = 0
+                    inserts = 0
+
+                    for j in np.arange(start, end + 1):
+                        if j in insert_sites.keys():
+                            # print(j)
+                            count += insert_sites[j]
+                            inserts += 1
+                    ins_index = inserts / \
+                        (end - start + 1) if end != start else 0
+                    #         count += sum(insert_sites[j])
+                    #         inserts += 1 if sum(insert_sites[j]) > 0 else 0
+                    # ins_index = inserts / \
+                    #     (end - start +
+                    #      1) if end != start else 0
+                    print(
+                        f'{feature_id}\t{gene_name}\t{rna_value}\t{feature_start}\t{feature_end}\t{strand}\t{count}\t{inserts}\t{ins_index}\t{product_value}')
+                    out.write(
+                        f'{feature_id}\t{gene_name}\t{rna_value}\t{feature_start}\t{feature_end}\t{strand}\t{count}\t{inserts}\t{ins_index}\t{product_value}\n')
 
 
-insert_read_counts = bam2insdict(bamfile)
-# print(insert_read_counts.keys())
-# print(len(read_counts))
+def main():
+    args = args_parse()
+    bamfile = os.path.abspath(args.bam_file)
+    emblfile = os.path.abspath(args.embl_file)
+    current_path = os.path.abspath(os.path.dirname(__file__))
+    output = args.output
+
+    if re.search(r'[\/]', output):
+        sys.exit('Please check your output file name, do not give a PATH string')
+    else:
+        output = os.path.join(current_path, args.output)
+
+    get_insertion_stat(bamfile, emblfile, output)
 
 
-# parse embl file
-
-
-# Replace 'your_embl_file.embl' with the actual path to your EMBL file
-embl_file = 'H16SD2BY4_gxw.embl'
-
-
-cds_coordinates = cds_locations(embl_file)
-
-
-# output.write(
-#     'locus_tag\tgene_name\tncrna\tstart\tend\tstrand\tread_count\tins_count\tins_index\tproduct')
-
-records = SeqIO.parse(embl_file, 'embl')
-for record in records:
-    seq_id = record.id
-    if seq_id == '':
-        sys.exit(
-            "Could not find sequence name from your given embl file. Exiting ...")
-
-    # print(dir(record))
-    # Access information from the SeqRecord
-    # print(f"Accession: {record.id}")
-    # print(f"Description: {record.description}")
-    # print(f"Sequence length: {len(record.seq)}")
-    # ... other relevant information
-
-    # check if embl seq id in the insertion site dictionary
-
-    try:
-        insert_sites = insert_read_counts[record.id]
-    except:
-        sys.exit("Could not found the corresponding seq name %s in insertion dictionary, please check your embl file and make sure your mapping reference file has the same header with your embl file." % record.id)
-
-    # Access features (e.g., CDS, gene, etc.)
-    for feature in record.features:
-        if feature.type == "gene" and not is_gene_within_cds(cds_coordinates, feature):
-            continue
-        if feature.type in ["CDS", "polypeptide", "gene"]:
-            feature_id = get_feature_id(feature)
-            gene_name = get_gene_name(feature)
-            product_value = get_product_value(feature)
-            rna_value = "1" if "ncRNA" in feature.qualifiers else "0"
-            strand = feature.location.strand
-
-            start = feature.location.start
-            end = feature.location.end - 1
-            feature_start = start + 1
-            feature_end = end + 1
-            # print(
-            # f'{feature_id}\t{gene_name}\t{rna_value}\t{start}\t{end}\t{strand}\t{product_value}')
-
-            # calculate the insert_count and the total reads in the corresponding insertion gene
-            count = 0
-            inserts = 0
-
-            for j in np.arange(start, end + 1):
-                if j in insert_sites.keys():
-                    # print(j)
-                    count += insert_sites[j]
-                    inserts += 1
-            ins_index = inserts / (end - start + 1) if end != start else 0
-            #         count += sum(insert_sites[j])
-            #         inserts += 1 if sum(insert_sites[j]) > 0 else 0
-            # ins_index = inserts / \
-            #     (end - start +
-            #      1) if end != start else 0
-            print(
-                f'{feature_id}\t{gene_name}\t{rna_value}\t{feature_start}\t{feature_end}\t{strand}\t{count}\t{inserts}\t{ins_index}\t{product_value}')
-        # output.write(
-        #     f'{feature_id}\t{gene_name}\t{rna_value}\t{feature_start}\t{feature_end}\t{strand}\t{count}\t{inserts}\t{ins_index}\t{product_value}\n')
+if __name__ == '__main__':
+    main()

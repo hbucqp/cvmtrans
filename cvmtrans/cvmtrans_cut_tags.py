@@ -12,7 +12,7 @@ import argparse
 def args_parse():
     "Parse the input arguments, use '-h' for help."
     parser = argparse.ArgumentParser(
-        usage='cvmtrans_cut_tags -i <input_fastq> -tag <sequence should inclued in reads> -o <output_fastq> \n\nAuthor: Qingpo Cui(SZQ Lab, China Agricultural University)\n')
+        usage="cvmtrans_cut_tags -i <input_fastq> -tag_5 <5' end tag> -tag_3 <3' end tag> -o <output_fastq> \n\nAuthor: Qingpo Cui(SZQ Lab, China Agricultural University)\n")
     # group = parser.add_mutually_exclusive_group(required=False)
     parser.add_argument(
         "-i", help="<input_fastq>: output filename of the fastq file")
